@@ -3,7 +3,10 @@ use std::error::Error;
 
 use ironworks::excel::{Excel, Field};
 
+use crate::exd_schema;
+
 pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+    let field_names = exd_schema::field_names(sheet_name)?;
     let sheet = excel.sheet(sheet_name)?;
     let columns = sheet.columns()?;
 
@@ -12,6 +15,9 @@ pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
 
     let path = format!("output/{}.csv", sheet_name);
     let mut writer = Writer::from_path(path)?;
+
+    // Write the field names header
+    writer.serialize(&field_names)?;
 
     for row in sheet.into_iter() {
         let row = &row?;

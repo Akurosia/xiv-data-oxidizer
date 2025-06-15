@@ -7,6 +7,7 @@ use ironworks::{
     sqpack::{Install, SqPack},
 };
 
+mod exd_schema;
 mod export;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -15,6 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let excel = Excel::new(ironworks).with_default_language(Language::English);
 
     export::sheet(&excel, "Mount")?;
+    // dbg!(exd_schema::field_names("Mount"));
 
     return Ok(());
 }
