@@ -2,13 +2,14 @@ use csv::Writer;
 use std::error::Error;
 
 use ironworks::excel::{Excel, Field};
-use ironworks::file::exh::ColumnDefinition;
+use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
 use crate::exd_schema;
 
 pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
     let field_names = exd_schema::field_names(sheet_name)?;
     let sheet = excel.sheet(sheet_name)?;
+    let has_subrows = sheet.kind()? == SheetKind::Subrows;
 
     // Sort by offset to align with EXDSchema column order
     let mut columns = sheet.columns()?;
@@ -24,8 +25,12 @@ pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
         let row = &row?;
         let mut data: Vec<String> = Vec::new();
 
-        // TODO: Support row_id.subrow_id
-        data.push(row.row_id().to_string());
+        let id = match has_subrows {
+            true => format!("{}.{}", row.row_id(), row.subrow_id()),
+            false => row.row_id().to_string(),
+        };
+
+        data.push(id);
 
         for column in columns.iter() {
             let specifier = ColumnDefinition {
