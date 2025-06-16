@@ -24,7 +24,7 @@ pub fn field_names(sheet_name: &str) -> Result<Vec<String>, Box<dyn Error>> {
 
     // Prefer the pending field list when available
     let names: Vec<String> = match schema.pending_fields {
-        Some(fields) => parse_field_names(&fields),
+        Some(pending) => parse_field_names(&pending),
         None => parse_field_names(&schema.fields),
     };
 
@@ -41,7 +41,7 @@ fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
     for field in fields.iter() {
         // Prefer the pending field name when available
         let latest_name = match &field.pending_name {
-            Some(name) => name,
+            Some(pending) => pending,
             None => &field.name,
         };
 
