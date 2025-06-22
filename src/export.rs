@@ -1,13 +1,16 @@
 use csv::Writer;
 use std::error::Error;
 
-use ironworks::excel::{Excel, Field};
+use ironworks::excel::{Excel, Field, Language};
 use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
 use crate::exd_schema;
 
-pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+    // Retrieve the field names based on EXDSchema
     let field_names = exd_schema::field_names(sheet_name)?;
+
+    // Fetch the sheet data
     let sheet = excel.sheet(sheet_name)?;
     let has_subrows = sheet.kind()? == SheetKind::Subrows;
 
@@ -15,12 +18,15 @@ pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
     let mut columns = sheet.columns()?;
     columns.sort_by_key(|column| column.offset);
 
-    let path = format!("output/{}.csv", sheet_name);
+    // Set up the output file
+    let language_code = language_code(language);
+    let path = format!("output/{}.{}.csv", sheet_name, language_code);
     let mut writer = Writer::from_path(path)?;
 
     // Write the field names header
     writer.serialize(&field_names)?;
 
+    // Write the file data
     for row in sheet.into_iter() {
         let row = &row?;
         let mut data: Vec<String> = Vec::new();
@@ -48,6 +54,19 @@ pub fn sheet(excel: &Excel, sheet_name: &str) -> Result<(), Box<dyn Error>> {
     writer.flush()?;
 
     return Ok(());
+}
+
+fn language_code(language: &Language) -> &str {
+    return match language {
+        Language::English => "en",
+        Language::German => "de",
+        Language::French => "fr",
+        Language::Japanese => "ja",
+        Language::Korean => "kr",
+        Language::ChineseSimplified => "chs",
+        Language::ChineseTraditional => "cht",
+        _ => "??",
+    };
 }
 
 fn field_to_string(field: &Field) -> String {

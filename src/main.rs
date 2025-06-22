@@ -13,10 +13,10 @@ mod export;
 fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new("D:\\SquareEnix\\FINAL FANTASY XIV - A Realm Reborn");
     let ironworks = Ironworks::new().with_resource(SqPack::new(Install::at(path)));
-    let excel = Excel::new(ironworks).with_default_language(Language::English);
+    let language = Language::English;
+    let excel = Excel::new(ironworks).with_default_language(language);
 
-    export::sheet(&excel, "Mount")?;
-    // dbg!(exd_schema::field_names("Mount"));
+    export::sheet(&excel, &language, "Mount")?;
 
     return Ok(());
 }
