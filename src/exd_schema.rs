@@ -84,7 +84,6 @@ fn latest_name(field: &Field) -> String {
     };
 }
 
-// A flat array is just the given field N times
 fn parse_array(field: &Field, name: String, names: &mut Vec<String>) {
     match &field.count {
         Some(count) => {
