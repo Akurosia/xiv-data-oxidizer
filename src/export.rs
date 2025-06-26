@@ -8,6 +8,7 @@ use ironworks::file::exh::{ColumnDefinition, SheetKind};
 use crate::exd_schema::field_names;
 use crate::formatter::format_string;
 
+/// Generates a CSV extract for the given sheet and language
 pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
     // Set up the Input for parsing sestrings
     let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name: Last First
@@ -61,6 +62,7 @@ pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(),
     return Ok(());
 }
 
+/// Returns a short code for the given language
 fn language_code(language: &Language) -> &str {
     return match language {
         Language::English => "en",
@@ -74,6 +76,7 @@ fn language_code(language: &Language) -> &str {
     };
 }
 
+/// Transforms the given field to a string
 fn field_to_string(field: &Field, input: &Input) -> String {
     return match field {
         Field::String(value) => format_string(value, input),

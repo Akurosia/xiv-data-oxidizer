@@ -40,6 +40,7 @@ impl Default for FieldKind {
     }
 }
 
+/// Retrieve a list of field names from EXDSchema for the given sheet
 pub fn field_names(sheet_name: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let path = format!("schemas/{}.yml", sheet_name);
     let file = File::open(path)?;
