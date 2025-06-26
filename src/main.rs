@@ -9,6 +9,7 @@ use ironworks::{
 
 mod exd_schema;
 mod export;
+mod formatter;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = Path::new("D:\\SquareEnix\\FINAL FANTASY XIV - A Realm Reborn");

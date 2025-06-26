@@ -1,14 +1,19 @@
 use csv::Writer;
+use ironworks::sestring::format::Input;
 use std::error::Error;
 
 use ironworks::excel::{Excel, Field, Language};
 use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
-use crate::exd_schema;
+use crate::exd_schema::field_names;
+use crate::formatter::format_string;
 
 pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+    // Set up the Input for parsing sestrings
+    let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name: Last First
+
     // Retrieve the field names based on EXDSchema
-    let field_names = exd_schema::field_names(sheet_name)?;
+    let field_names = field_names(sheet_name)?;
 
     // Fetch the sheet data
     let sheet = excel.sheet(sheet_name)?;
@@ -45,7 +50,7 @@ pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(),
             };
             let field = row.field(&specifier)?;
 
-            data.push(field_to_string(&field));
+            data.push(field_to_string(&field, &input));
         }
 
         writer.serialize(data)?;
@@ -69,10 +74,9 @@ fn language_code(language: &Language) -> &str {
     };
 }
 
-fn field_to_string(field: &Field) -> String {
+fn field_to_string(field: &Field, input: &Input) -> String {
     return match field {
-        // TODO: Figure out formatting for complex strings (e.g. descriptions, tooltips)
-        Field::String(value) => value.format().unwrap(),
+        Field::String(value) => format_string(value, input),
         Field::Bool(value) => {
             if *value {
                 String::from("True")
