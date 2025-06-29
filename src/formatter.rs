@@ -5,18 +5,18 @@ use ironworks::sestring::{
 
 /// Format an sestring with HTML tags
 pub fn format_string(string: &SeString, input: &Input) -> String {
-    let mut writer = TagWriter::default();
+    let mut writer = MarkdownWriter::default();
     let _ = format(string.as_ref(), &input, &mut writer);
 
     return writer.buffer;
 }
 
 #[derive(Debug, Default)]
-struct TagWriter {
+struct MarkdownWriter {
     buffer: String,
 }
 
-impl Write for TagWriter {
+impl Write for MarkdownWriter {
     // Potentially do some mass replacements here
     fn write_str(&mut self, str: &str) -> Result<(), SeStringError> {
         self.buffer.push_str(&str);
@@ -25,19 +25,14 @@ impl Write for TagWriter {
     }
 
     // Format styled text with HTML tags
-    fn set_style(&mut self, style: Style, enabled: bool) -> Result<(), SeStringError> {
-        let tag = match style {
-            Style::Bold => "b",
-            Style::Italic => "i",
+    fn set_style(&mut self, style: Style, _enabled: bool) -> Result<(), SeStringError> {
+        let markdown = match style {
+            Style::Bold => "**",
+            Style::Italic => "*",
             _ => return Ok(()),
         };
 
-        let close = match enabled {
-            true => "",
-            false => "/",
-        };
-
-        self.buffer.push_str(&format!("<{}{}>", close, tag));
+        self.buffer.push_str(markdown);
 
         Ok(())
     }
@@ -45,7 +40,7 @@ impl Write for TagWriter {
     // Just replace all of the color shenanigans with <b> tags
     fn push_color(&mut self, usage: ColorUsage, _color: Color) -> Result<(), SeStringError> {
         if usage == ColorUsage::Foreground {
-            self.buffer.push_str("<b>");
+            self.buffer.push_str("**");
         }
 
         Ok(())
@@ -53,7 +48,7 @@ impl Write for TagWriter {
 
     fn pop_color(&mut self, usage: ColorUsage) -> Result<(), SeStringError> {
         if usage != ColorUsage::Foreground {
-            self.buffer.push_str("</b>");
+            self.buffer.push_str("**");
         }
 
         Ok(())
