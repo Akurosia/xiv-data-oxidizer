@@ -7,17 +7,41 @@ use ironworks::{
     sqpack::{Install, SqPack},
 };
 
+mod config;
 mod exd_schema;
 mod export;
 mod formatter;
 
+const LANGUAGES: [Language; 4] = [
+    Language::English,
+    Language::German,
+    Language::French,
+    Language::Japanese,
+];
+
 fn main() -> Result<(), Box<dyn Error>> {
-    let path = Path::new("D:\\SquareEnix\\FINAL FANTASY XIV - A Realm Reborn");
+    let config = config::read().expect("Could not read config");
+    let path = Path::new(&config.path);
+
     let ironworks = Ironworks::new().with_resource(SqPack::new(Install::at(path)));
     let language = Language::English;
-    let excel = Excel::new(ironworks).with_default_language(language);
+    let mut excel = Excel::new(ironworks).with_default_language(language);
 
-    export::sheet(&excel, &language, "Mount")?;
+    for sheet in config.raw_sheets {
+        export::sheet(&excel, language, &sheet)?;
+    }
 
-    return Ok(());
+    let translated_sheets = config.translated_sheets;
+
+    for language in LANGUAGES {
+        excel.set_default_language(language);
+
+        for sheet in &translated_sheets {
+            export::sheet(&excel, language, &sheet)?;
+        }
+    }
+
+    // export::sheet(&excel, &language, "Mount")?;
+
+    Ok(())
 }

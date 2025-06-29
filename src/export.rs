@@ -9,7 +9,7 @@ use crate::exd_schema::field_names;
 use crate::formatter::format_string;
 
 /// Generates a CSV extract for the given sheet and language
-pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+pub fn sheet(excel: &Excel, language: Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
     // Set up the Input for parsing sestrings
     let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name: Last First
 
@@ -25,7 +25,7 @@ pub fn sheet(excel: &Excel, language: &Language, sheet_name: &str) -> Result<(),
     columns.sort_by_key(|column| column.offset);
 
     // Set up the output file
-    let language_code = language_code(language);
+    let language_code = language_code(&language);
     let path = format!("output/{}.{}.csv", sheet_name, language_code);
     let mut writer = Writer::from_path(path)?;
 
