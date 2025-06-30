@@ -10,7 +10,7 @@ pub struct Config {
 }
 
 pub fn read() -> Result<Config, Box<dyn Error>> {
-    let file = File::open("src/config.yml")?;
+    let file = File::open("config.yml")?;
     let config: Config = serde_yml::from_reader(file)?;
 
     Ok(config)
