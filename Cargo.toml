@@ -1,6 +1,6 @@
 [package]
 edition = "2024"
-name = "xiv-data-oxidized"
+name = "xiv-data-oxidizer"
 version = "0.1.0"
 
 [dependencies]
