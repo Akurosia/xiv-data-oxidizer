@@ -17,7 +17,6 @@ struct MarkdownWriter {
 }
 
 impl Write for MarkdownWriter {
-    // Potentially do some mass replacements here
     fn write_str(&mut self, str: &str) -> Result<(), SeStringError> {
         self.buffer.push_str(&str);
 

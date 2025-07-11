@@ -41,6 +41,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Quick debugging for schema updates
+
+    // for language in LANGUAGES {
+    //     excel.set_default_language(language);
+    //     export::sheet(&excel, language, &String::from("Mount"))?;
+    // }
+
     // export::sheet(&excel, &language, "Mount")?;
 
     Ok(())
