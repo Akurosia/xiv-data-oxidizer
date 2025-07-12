@@ -41,6 +41,7 @@ translated_sheets:
 - CompanionMove
 - CompanionTransient
 - ContentFinderCondition
+- ContentType
 - Emote
 - EmoteCategory
 - ENpcBase
