@@ -21,6 +21,10 @@ const LANGUAGES: [Language; 4] = [
     Language::French,
     Language::Japanese,
 ];
+fn is_language_enabled(code: &str, config: &config::Config) -> bool {
+    config.languages.is_empty() || config.languages == vec!["*"] || config.languages.contains(&code.to_string())
+}
+
 
 pub fn language_code(language: &Language) -> &str {
     match language {
@@ -74,23 +78,36 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     {
         let excel_lock = excel.lock().unwrap();
+
+        // Precompute flags
+        let raw_all = config.raw_sheets.len() == 1 && config.raw_sheets[0] == "*";
+        let trans_all = config.translated_sheets.len() == 1 && config.translated_sheets[0] == "*";
+
         for sheet in &all_sheets {
             let supported_languages = match excel_lock.sheet(sheet) {
                 Ok(sheet) => sheet.languages().unwrap_or_else(|_| vec![]),
                 Err(_) => vec![],
             };
+
             if supported_languages.len() == 1 {
-                // Single-language sheet: no suffix
-                // println!("Single-language sheet: {}", sheet); // 👈 added line
-                tasks.push((supported_languages[0], sheet.clone(), None));
+                // Single-language sheet: raw export
+                if raw_all || config.raw_sheets.contains(sheet) {
+                    tasks.push((supported_languages[0], sheet.clone(), None));
+                }
             } else {
-                // Multi-language sheet: include language suffix
-                for lang in LANGUAGES { //supported_languages {
-                    tasks.push((lang, sheet.clone(), Some(language_code(&lang).to_string())));
+                // Multi-language sheet: translated export
+                if trans_all || config.translated_sheets.contains(sheet) {
+                    for lang in LANGUAGES {
+                        let code = language_code(&lang);
+                        if is_language_enabled(code, &config) {
+                            tasks.push((lang, sheet.clone(), Some(code.to_string())));
+                        }
+                    }
                 }
             }
         }
     }
+
 
     let total_tasks = tasks.len();
 

@@ -7,6 +7,7 @@ pub struct Config {
     pub path: String,
     pub raw_sheets: Vec<String>,
     pub translated_sheets: Vec<String>,
+    pub languages: Vec<String>,
 }
 
 pub fn read() -> Result<Config, Box<dyn Error>> {
