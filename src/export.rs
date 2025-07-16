@@ -1,92 +1,104 @@
 use csv::Writer;
 use ironworks::sestring::format::Input;
 use std::error::Error;
+use std::fs::File;
+use std::io::BufWriter;
 
 use ironworks::excel::{Excel, Field, Language};
 use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
 use crate::exd_schema::field_names;
 use crate::formatter::format_string;
+use serde_json::{json, Value};
 
-/// Generates a CSV extract for the given sheet and language
-pub fn sheet(excel: &Excel, language: Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
-    // Set up the Input for parsing sestrings
-    let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name: Last First
+use std::collections::BTreeMap;
 
-    // Retrieve the field names based on EXDSchema
+/// Generates a CSV (and optionally JSON) extract for the given sheet, language, and optional suffix
+pub fn sheet_with_suffix(excel: &Excel, language: Language, sheet_name: &str, suffix: Option<String>, write_json: bool) -> Result<(), Box<dyn Error>> {
+    let input = Input::new().with_global_parameter(1, String::from("Player Player"));
     let field_names = field_names(sheet_name)?;
-
-    // Fetch the sheet data
     let sheet = excel.sheet(sheet_name)?;
     let has_subrows = sheet.kind()? == SheetKind::Subrows;
 
-    // Sort by offset to align with EXDSchema column order
+    // Sort columns by offset
     let mut columns = sheet.columns()?;
     columns.sort_by_key(|column| column.offset);
 
-    // Set up the output file
-    let language_code = language_code(&language);
-    let path = format!("output/{}.{}.csv", sheet_name, language_code);
-    let mut writer = Writer::from_path(path)?;
+    // Generate filenames
+    let base_filename = match suffix {
+        Some(ref sfx) => format!("output/{}.{}", sheet_name, sfx),
+        None => format!("output/{}", sheet_name),
+    };
 
-    // Write the field names header
-    writer.serialize(&field_names)?;
+    // Setup CSV writer
+    let csv_path = format!("{}.csv", base_filename);
+    //let mut csvwriter = Writer::from_path(&csv_path)?;
 
-    // Write the file data
+    // Write headers to CSV
+    //csvwriter.serialize(&field_names)?;
+
+    let mut json_rows: BTreeMap<String, Value> = BTreeMap::new();
+
     for row in sheet.into_iter() {
         let row = &row?;
-        let mut data: Vec<String> = Vec::new();
-
-        let id = match has_subrows {
-            true => format!("{}.{}", row.row_id(), row.subrow_id()),
-            false => row.row_id().to_string(),
+        let id = if has_subrows {
+            format!("{}.{}", row.row_id(), row.subrow_id())
+        } else {
+            row.row_id().to_string()
         };
 
-        data.push(id);
+        let mut data: Vec<String> = vec![id.clone()];
+        let mut json_object = serde_json::Map::new();
 
-        for column in columns.iter() {
+        if field_names[0] == "#" {
+            json_object.insert("ID".to_string(), json!(id));
+        } else {
+            json_object.insert(field_names[0].clone(), json!(id));
+        }
+
+        for (i, column) in columns.iter().enumerate() {
             let specifier = ColumnDefinition {
                 kind: column.kind,
                 offset: column.offset,
             };
             let field = row.field(&specifier)?;
+            let string_value = field_to_string(&field, &input);
 
-            data.push(field_to_string(&field, &input));
-        }
+            data.push(string_value.clone());
 
-        writer.serialize(data)?;
-    }
-
-    writer.flush()?;
-
-    return Ok(());
-}
-
-/// Returns a short code for the given language
-fn language_code(language: &Language) -> &str {
-    return match language {
-        Language::English => "en",
-        Language::German => "de",
-        Language::French => "fr",
-        Language::Japanese => "ja",
-        Language::Korean => "kr",
-        Language::ChineseSimplified => "chs",
-        Language::ChineseTraditional => "cht",
-        _ => "??",
-    };
-}
-
-/// Transforms the given field to a string
-fn field_to_string(field: &Field, input: &Input) -> String {
-    return match field {
-        Field::String(value) => format_string(value, input),
-        Field::Bool(value) => {
-            if *value {
-                String::from("True")
-            } else {
-                String::from("False")
+            if let Some(name) = field_names.get(i + 1) {
+                json_object.insert(name.clone(), json!(string_value));
             }
         }
+
+        //csvwriter.serialize(data)?;
+
+        if write_json {
+            if let Some(id) = json_object.get("ID") {
+                if let Some(id_str) = id.as_str() {
+                    json_rows.insert(id_str.to_string(), Value::Object(json_object));
+                }
+            }
+        }
+    }
+
+    //csvwriter.flush()?;
+
+    if write_json {
+        let json_path = format!("{}.json", base_filename);
+        let file = File::create(json_path)?;
+        let jsonwriter = BufWriter::new(file);
+        serde_json::to_writer_pretty(jsonwriter, &json_rows)?;
+    }
+
+    Ok(())
+}
+
+/// Converts a field to string value for export
+fn field_to_string(field: &Field, input: &Input) -> String {
+    match field {
+        Field::String(value) => format_string(value, input),
+        Field::Bool(value) => value.to_string(),
         Field::I8(value) => value.to_string(),
         Field::I16(value) => value.to_string(),
         Field::I32(value) => value.to_string(),
@@ -96,5 +108,5 @@ fn field_to_string(field: &Field, input: &Input) -> String {
         Field::U32(value) => value.to_string(),
         Field::U64(value) => value.to_string(),
         Field::F32(value) => value.to_string(),
-    };
+    }
 }
