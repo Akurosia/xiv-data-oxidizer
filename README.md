@@ -15,6 +15,16 @@ cp config.yml.example config.yml
 cargo run
 ```
 
+## Update submodule
+```
+cd .\schemas\
+git checkout [COMMIT]
+cd ..
+git add schemas
+git commit -am "Pulled [COMMIT] in submodule"
+git push
+```
+
 ---
 
 FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.
