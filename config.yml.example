@@ -68,3 +68,9 @@ translated_sheets:
 - TripleTriadCardType
 - TripleTriadRule
 - VVDNotebookContents
+
+languages:
+- "de"
+- "fr"
+- "en"
+- "ja"
