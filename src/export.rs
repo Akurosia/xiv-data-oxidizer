@@ -50,24 +50,48 @@ pub fn sheet_with_suffix(excel: &Excel, _language: Language, sheet_name: &str, s
         let mut data: Vec<String> = vec![id.clone()];
         let mut json_object = serde_json::Map::new();
 
-        json_object.insert(field_names[0].clone(), json!(id));
+        // Erstes Feld ist immer die ID
+        if let crate::exd_schema::FieldName::Simple(ref id_name) = field_names[0] {
+            json_object.insert(id_name.clone(), json!(id));
+        }
 
-        for (i, column) in columns.iter().enumerate() {
-
-            let specifier = ColumnDefinition {
-                kind: column.kind,
-                offset: column.offset,
-            };
-            let field = row.field(&specifier)?;
-            let string_value = field_to_string(&field, &input);
-
-            data.push(string_value.clone());
-
-            if let Some(mut name) = field_names.get(i + 1).cloned() {
-                if name.starts_with("Unknown") {
-                    name = format!("col_{}", i + 1);
+        let mut col_idx = 0;
+        for field_name in field_names.iter().skip(1) {
+            match field_name {
+                crate::exd_schema::FieldName::Simple(name) => {
+                    if col_idx >= columns.len() { break; }
+                    let column = &columns[col_idx];
+                    let specifier = ColumnDefinition {
+                        kind: column.kind,
+                        offset: column.offset,
+                    };
+                    let field = row.field(&specifier)?;
+                    let string_value = field_to_string(&field, &input);
+                    data.push(string_value.clone());
+                    let mut out_name = name.clone();
+                    if out_name.starts_with("Unknown") {
+                        out_name = format!("col_{}", col_idx + 1);
+                    }
+                    json_object.insert(out_name, json!(string_value));
+                    col_idx += 1;
                 }
-                json_object.insert(name, json!(string_value));
+                crate::exd_schema::FieldName::Array(name, keys) => {
+                    let mut arr_map = serde_json::Map::new();
+                    for key in keys {
+                        if col_idx >= columns.len() { break; }
+                        let column = &columns[col_idx];
+                        let specifier = ColumnDefinition {
+                            kind: column.kind,
+                            offset: column.offset,
+                        };
+                        let field = row.field(&specifier)?;
+                        let string_value = field_to_string(&field, &input);
+                        data.push(string_value.clone());
+                        arr_map.insert(key.clone(), json!(string_value));
+                        col_idx += 1;
+                    }
+                    json_object.insert(name.clone(), Value::Object(arr_map));
+                }
             }
         }
 

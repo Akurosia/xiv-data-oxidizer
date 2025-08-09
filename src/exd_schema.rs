@@ -20,7 +20,6 @@ struct Field {
     kind: FieldKind,
 
     count: Option<u32>,
-    fields: Option<Vec<Field>>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -40,26 +39,32 @@ impl Default for FieldKind {
     }
 }
 
+
+/// Enum für Feldnamen, um Arrays als Map darzustellen
+#[derive(Debug, Clone)]
+pub enum FieldName {
+    Simple(String),
+    Array(String, Vec<String>), // z.B. ("Data", ["0", "1", ...])
+}
+
 /// Retrieve a list of field names from EXDSchema for the given sheet
-pub fn field_names(sheet_name: &str) -> Result<Vec<String>, Box<dyn Error>> {
+pub fn field_names(sheet_name: &str) -> Result<Vec<FieldName>, Box<dyn Error>> {
     let path = format!("schemas/{}.yml", sheet_name);
     let file = File::open(path)?;
     let schema: Schema = serde_yml::from_reader(file)?;
 
     // Prefer the pending field list when available
-    let names: Vec<String> = match schema.pending_fields {
+    let names: Vec<FieldName> = match schema.pending_fields {
         Some(pending) => parse_field_names(&pending),
         None => parse_field_names(&schema.fields),
     };
 
-    return Ok(names);
+    Ok(names)
 }
 
-fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-
-    // Add the ID field
-    names.push(String::from("#"));
+fn parse_field_names(fields: &Vec<Field>) -> Vec<FieldName> {
+    let mut names: Vec<FieldName> = Vec::new();
+    names.push(FieldName::Simple("#".to_string()));
 
     for field in fields.iter() {
         let name = {
@@ -72,18 +77,17 @@ fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
         };
         match field.kind {
             FieldKind::Array => {
-                parse_array(&field, name, &mut names);
+                let arr_keys = array_keys(field);
+                names.push(FieldName::Array(name, arr_keys));
             }
             _ => {
-                names.push(name);
+                names.push(FieldName::Simple(name));
             }
         }
     }
-
-    return names;
+    names
 }
 
-// Prefer the pending field name when available
 fn latest_name(field: &Field) -> String {
     if let Some(pending) = &field.pending_name {
         pending.clone()
@@ -94,42 +98,10 @@ fn latest_name(field: &Field) -> String {
     }
 }
 
-fn parse_array(field: &Field, name: String, names: &mut Vec<String>) {
+/// Liefert die Keys für ein Array-Feld (z.B. ["0", "1", ...])
+fn array_keys(field: &Field) -> Vec<String> {
     match &field.count {
-        Some(count) => {
-            for i in 0..*count {
-                // Append an index to the given name
-                let name = format!("{}[{}]", name, i);
-
-                match &field.fields {
-                    Some(fields) => {
-                        if fields.len() > 1 {
-                            // If the array has more than one field, we need to traverse them and parse the nested fields
-                            for field in fields {
-                                // Technically we should re-check the field kind, but only arrays are countable at the moment
-                                let child_name = latest_name(field);
-                                let child_name = if child_name == "Unknown" {
-                                    format!("col_{}", names.len()) // or use the loop index
-                                } else {
-                                    child_name
-                                };
-                                parse_array(&field, format!("{}.{}", name, child_name), names);
-                            }
-                        } else {
-                            // Otherwise, we can just push the new field name
-                            names.push(name);
-                        }
-                    }
-                    None => {
-                        // There are no nested fields to deal with - just push the field name
-                        names.push(name);
-                    }
-                }
-            }
-        }
-        None => {
-            // An uncountable field found within a nested array - just push the field name
-            names.push(name);
-        }
+        Some(count) => (0..*count).map(|i| i.to_string()).collect(),
+        None => vec![],
     }
 }
