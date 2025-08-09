@@ -62,8 +62,14 @@ fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
     names.push(String::from("#"));
 
     for field in fields.iter() {
-        let name = latest_name(&field);
-
+        let name = {
+            let n = latest_name(&field);
+            if n == "Unknown" {
+                format!("col_{}", names.len())
+            } else {
+                n
+            }
+        };
         match field.kind {
             FieldKind::Array => {
                 parse_array(&field, name, &mut names);
@@ -79,10 +85,13 @@ fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
 
 // Prefer the pending field name when available
 fn latest_name(field: &Field) -> String {
-    return match &field.pending_name {
-        Some(pending) => pending.clone(),
-        None => field.name.clone().unwrap(),
-    };
+    if let Some(pending) = &field.pending_name {
+        pending.clone()
+    } else if let Some(name) = &field.name {
+        name.clone()
+    } else {
+        "Unknown".to_string()
+    }
 }
 
 fn parse_array(field: &Field, name: String, names: &mut Vec<String>) {
@@ -98,11 +107,13 @@ fn parse_array(field: &Field, name: String, names: &mut Vec<String>) {
                             // If the array has more than one field, we need to traverse them and parse the nested fields
                             for field in fields {
                                 // Technically we should re-check the field kind, but only arrays are countable at the moment
-                                parse_array(
-                                    &field,
-                                    format!("{}.{}", name, latest_name(field)),
-                                    names,
-                                );
+                                let child_name = latest_name(field);
+                                let child_name = if child_name == "Unknown" {
+                                    format!("col_{}", names.len()) // or use the loop index
+                                } else {
+                                    child_name
+                                };
+                                parse_array(&field, format!("{}.{}", name, child_name), names);
                             }
                         } else {
                             // Otherwise, we can just push the new field name

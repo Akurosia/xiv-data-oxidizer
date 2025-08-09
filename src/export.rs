@@ -1,4 +1,4 @@
-use csv::Writer;
+//use csv::Writer;
 use ironworks::sestring::format::Input;
 use std::error::Error;
 use std::fs::File;
@@ -14,7 +14,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 /// Generates a CSV (and optionally JSON) extract for the given sheet, language, and optional suffix
-pub fn sheet_with_suffix(excel: &Excel, language: Language, sheet_name: &str, suffix: Option<String>, write_json: bool) -> Result<(), Box<dyn Error>> {
+pub fn sheet_with_suffix(excel: &Excel, _language: Language, sheet_name: &str, suffix: Option<String>, write_json: bool) -> Result<(), Box<dyn Error>> {
     let input = Input::new().with_global_parameter(1, String::from("Player Player"));
     let field_names = field_names(sheet_name)?;
     let sheet = excel.sheet(sheet_name)?;
@@ -31,7 +31,7 @@ pub fn sheet_with_suffix(excel: &Excel, language: Language, sheet_name: &str, su
     };
 
     // Setup CSV writer
-    let csv_path = format!("{}.csv", base_filename);
+    //let csv_path = format!("{}.csv", base_filename);
     //let mut csvwriter = Writer::from_path(&csv_path)?;
 
     // Write headers to CSV
@@ -50,13 +50,10 @@ pub fn sheet_with_suffix(excel: &Excel, language: Language, sheet_name: &str, su
         let mut data: Vec<String> = vec![id.clone()];
         let mut json_object = serde_json::Map::new();
 
-        if field_names[0] == "#" {
-            json_object.insert("ID".to_string(), json!(id));
-        } else {
-            json_object.insert(field_names[0].clone(), json!(id));
-        }
+        json_object.insert(field_names[0].clone(), json!(id));
 
         for (i, column) in columns.iter().enumerate() {
+
             let specifier = ColumnDefinition {
                 kind: column.kind,
                 offset: column.offset,
@@ -66,18 +63,22 @@ pub fn sheet_with_suffix(excel: &Excel, language: Language, sheet_name: &str, su
 
             data.push(string_value.clone());
 
-            if let Some(name) = field_names.get(i + 1) {
-                json_object.insert(name.clone(), json!(string_value));
+            if let Some(mut name) = field_names.get(i + 1).cloned() {
+                if name.starts_with("Unknown") {
+                    name = format!("col_{}", i + 1);
+                }
+                json_object.insert(name, json!(string_value));
             }
         }
 
         //csvwriter.serialize(data)?;
 
         if write_json {
-            if let Some(id) = json_object.get("ID") {
-                if let Some(id_str) = id.as_str() {
-                    json_rows.insert(id_str.to_string(), Value::Object(json_object));
-                }
+            if let Some(Value::String(id_str)) = json_object.get("#") {
+                let id_str = id_str.clone(); // End the immutable borrow here
+
+                json_object.remove("#"); // Now it's safe to mutably borrow
+                json_rows.insert(id_str, Value::Object(json_object));
             }
         }
     }
