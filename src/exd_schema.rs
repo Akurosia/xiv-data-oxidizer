@@ -64,6 +64,42 @@ pub fn field_names(sheet_name: &str) -> Result<Option<Vec<String>>, Box<dyn Erro
     return Ok(Some(names));
 }
 
+/// Retrieve the data indices for fields marked as icons in EXDSchema.
+/// Index 0 is the row ID column, so EXD columns begin at index 1.
+pub fn icon_field_indices(sheet_name: &str) -> Result<Vec<usize>, Box<dyn Error>> {
+    let schema = match read_schema(sheet_name)? {
+        Some(schema) => schema,
+        None => return Ok(Vec::new()),
+    };
+
+    let fields = match &schema.pending_fields {
+        Some(pending) => pending,
+        None => &schema.fields,
+    };
+
+    let mut indices = Vec::new();
+    let mut current_index = 1;
+    collect_icon_indices(fields, &mut current_index, &mut indices);
+
+    Ok(indices)
+}
+
+fn read_schema(sheet_name: &str) -> Result<Option<Schema>, Box<dyn Error>> {
+    let path = format!("schemas/{}.yml", sheet_name);
+    let file = match File::open(&path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err(format!("Could not read schema file: {path}").into()),
+    };
+
+    let schema: Schema = match serde_yml::from_reader(file) {
+        Ok(schema) => schema,
+        Err(_) => return Err(format!("Failed to parse schema: {path}").into()),
+    };
+
+    Ok(Some(schema))
+}
+
 fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
 
@@ -84,6 +120,38 @@ fn parse_field_names(fields: &Vec<Field>) -> Vec<String> {
     }
 
     return names;
+}
+
+fn collect_icon_indices(fields: &Vec<Field>, current_index: &mut usize, indices: &mut Vec<usize>) {
+    for field in fields.iter() {
+        collect_field_icon_indices(field, current_index, indices);
+    }
+}
+
+fn collect_field_icon_indices(field: &Field, current_index: &mut usize, indices: &mut Vec<usize>) {
+    match field.kind {
+        FieldKind::Array => {
+            let count = field.count.unwrap_or(1);
+            for _ in 0..count {
+                match &field.fields {
+                    Some(fields) => collect_icon_indices(fields, current_index, indices),
+                    None => {
+                        if field.kind == FieldKind::Icon {
+                            indices.push(*current_index);
+                        }
+                        *current_index += 1;
+                    }
+                }
+            }
+        }
+        FieldKind::Icon => {
+            indices.push(*current_index);
+            *current_index += 1;
+        }
+        _ => {
+            *current_index += 1;
+        }
+    }
 }
 
 // Prefer the pending field name when available

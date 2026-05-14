@@ -9,7 +9,7 @@ use std::path::Path;
 use ironworks::excel::{Excel, Field, Language, Row};
 use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
-use crate::exd_schema::field_names;
+use crate::exd_schema::{field_names, icon_field_indices};
 use crate::formatter::format_string;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,7 +33,8 @@ pub fn sheet(
     language: Language,
     sheet_name: &str,
     format: OutputFormat,
-) -> Result<(), Box<dyn Error>> {
+    collect_icons: bool,
+) -> Result<Vec<u32>, Box<dyn Error>> {
     // Set up the Input for parsing sestrings
     let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name
 
@@ -55,6 +56,11 @@ pub fn sheet(
     );
     create_output_dir(&path)?;
     let headers = field_names(sheet_name)?;
+    let icon_indices = match collect_icons {
+        true => icon_field_indices(sheet_name)?,
+        false => Vec::new(),
+    };
+    let mut icons = Vec::new();
 
     match format {
         OutputFormat::Csv => {
@@ -67,6 +73,7 @@ pub fn sheet(
 
             for row in sheet.into_iter() {
                 let data = row_to_data(&row?, has_subrows, &columns, &input)?;
+                collect_icon_values(&data, &icon_indices, &mut icons);
 
                 match writer.serialize(data) {
                     Ok(_) => (),
@@ -87,6 +94,7 @@ pub fn sheet(
 
             for row in sheet.into_iter() {
                 let row = row_to_data(&row?, has_subrows, &columns, &input)?;
+                collect_icon_values(&row, &icon_indices, &mut icons);
                 let object = row_to_object(&headers, row)?;
                 sequence.serialize_element(&object)?;
             }
@@ -95,7 +103,17 @@ pub fn sheet(
         }
     }
 
-    return Ok(());
+    return Ok(icons);
+}
+
+fn collect_icon_values(row: &Vec<String>, icon_indices: &Vec<usize>, icons: &mut Vec<u32>) {
+    for index in icon_indices {
+        if let Some(value) = row.get(*index).and_then(|value| value.parse::<u32>().ok()) {
+            if value > 0 {
+                icons.push(value);
+            }
+        }
+    }
 }
 
 fn row_to_data(
