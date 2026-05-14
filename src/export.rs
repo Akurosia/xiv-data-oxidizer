@@ -1,18 +1,39 @@
 use csv::Writer;
 use ironworks::Ironworks;
 use ironworks::sestring::format::Input;
+use serde::ser::{SerializeSeq, Serializer};
 use std::error::Error;
-use std::fs;
+use std::fs::{self, File};
 use std::path::Path;
 
-use ironworks::excel::{Excel, Field, Language};
+use ironworks::excel::{Excel, Field, Language, Row};
 use ironworks::file::exh::{ColumnDefinition, SheetKind};
 
 use crate::exd_schema::field_names;
 use crate::formatter::format_string;
 
-/// Generates a CSV extract for the given sheet and language
-pub fn sheet(excel: &Excel, language: Language, sheet_name: &str) -> Result<(), Box<dyn Error>> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OutputFormat {
+    Csv,
+    Json,
+}
+
+impl OutputFormat {
+    pub fn extension(&self) -> &str {
+        match self {
+            Self::Csv => "csv",
+            Self::Json => "json",
+        }
+    }
+}
+
+/// Generates an extract for the given sheet and language
+pub fn sheet(
+    excel: &Excel,
+    language: Language,
+    sheet_name: &str,
+    format: OutputFormat,
+) -> Result<(), Box<dyn Error>> {
     // Set up the Input for parsing sestrings
     let input = Input::new().with_global_parameter(1, String::from("Player Player")); // Player name
 
@@ -26,57 +47,128 @@ pub fn sheet(excel: &Excel, language: Language, sheet_name: &str) -> Result<(), 
 
     // Set up the output file
     let language_code = language_code(&language);
-    let path = format!("output/{}/{}.csv", language_code, sheet_name);
-    if let Some(parent) = Path::new(&path).parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let mut writer =
-        Writer::from_path(&path).expect(format!("Failed to open output file: {}", &path).as_str());
+    let path = format!(
+        "output/{}/{}.{}",
+        language_code,
+        sheet_name,
+        format.extension()
+    );
+    create_output_dir(&path)?;
+    let headers = field_names(sheet_name)?;
 
-    // Write the field header
-    match field_names(sheet_name)? {
-        Some(names) => writer.serialize(&names)?,
-        None => (),
-    };
+    match format {
+        OutputFormat::Csv => {
+            let mut writer = Writer::from_path(&path)
+                .expect(format!("Failed to open output file: {}", &path).as_str());
 
-    // Write the file data
-    for row in sheet.into_iter() {
-        let row = &row?;
-        let mut data: Vec<String> = Vec::new();
-
-        let id = match has_subrows {
-            true => format!("{}.{}", row.row_id(), row.subrow_id()),
-            false => row.row_id().to_string(),
-        };
-
-        data.push(id);
-
-        for column in columns.iter() {
-            let specifier = ColumnDefinition {
-                kind: column.kind,
-                offset: column.offset,
-            };
-            let field = row.field(&specifier)?;
-
-            data.push(field_to_string(&field, &input));
-        }
-
-        match writer.serialize(data) {
-            Ok(_) => (),
-            Err(err) => {
-                return Err(format!(
-                    "{err}. For differing field counts, try adding Unknown columns to the schema.",
-                )
-                .into());
+            if let Some(headers) = headers {
+                writer.serialize(headers)?;
             }
+
+            for row in sheet.into_iter() {
+                let data = row_to_data(&row?, has_subrows, &columns, &input)?;
+
+                match writer.serialize(data) {
+                    Ok(_) => (),
+                    Err(err) => return Err(row_field_count_error(err).into()),
+                }
+            }
+
+            writer
+                .flush()
+                .expect(format!("Failed to write output file: {}", &path).as_str());
+        }
+        OutputFormat::Json => {
+            let headers = headers.unwrap_or_else(|| fallback_field_names(columns.len()));
+            let file = File::create(&path)
+                .expect(format!("Failed to open output file: {}", &path).as_str());
+            let mut serializer = serde_json::Serializer::pretty(file);
+            let mut sequence = serializer.serialize_seq(None)?;
+
+            for row in sheet.into_iter() {
+                let row = row_to_data(&row?, has_subrows, &columns, &input)?;
+                let object = row_to_object(&headers, row)?;
+                sequence.serialize_element(&object)?;
+            }
+
+            sequence.end()?;
         }
     }
-
-    writer
-        .flush()
-        .expect(format!("Failed to write output file: {}", &path).as_str());
 
     return Ok(());
+}
+
+fn row_to_data(
+    row: &Row,
+    has_subrows: bool,
+    columns: &[ColumnDefinition],
+    input: &Input,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut data: Vec<String> = Vec::new();
+
+    let id = match has_subrows {
+        true => format!("{}.{}", row.row_id(), row.subrow_id()),
+        false => row.row_id().to_string(),
+    };
+
+    data.push(id);
+
+    for column in columns.iter() {
+        let specifier = ColumnDefinition {
+            kind: column.kind,
+            offset: column.offset,
+        };
+        let field = row.field(&specifier)?;
+
+        data.push(field_to_string(&field, input));
+    }
+
+    Ok(data)
+}
+
+fn row_to_object(
+    headers: &[String],
+    row: Vec<String>,
+) -> Result<serde_json::Map<String, serde_json::Value>, Box<dyn Error>> {
+    if row.len() != headers.len() {
+        return Err(row_field_count_error(format!(
+            "found {} fields, expected {}",
+            row.len(),
+            headers.len()
+        ))
+        .into());
+    }
+
+    let object = headers
+        .iter()
+        .cloned()
+        .zip(row.into_iter().map(serde_json::Value::String))
+        .collect();
+
+    Ok(object)
+}
+
+fn create_output_dir(path: &str) -> Result<(), Box<dyn Error>> {
+    if let Some(parent) = Path::new(path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    Ok(())
+}
+
+fn fallback_field_names(column_count: usize) -> Vec<String> {
+    let mut names = Vec::with_capacity(column_count + 1);
+    names.push(String::from("#"));
+
+    for index in 0..column_count {
+        names.push(index.to_string());
+    }
+
+    names
+}
+
+fn row_field_count_error(error: impl std::fmt::Display) -> String {
+    format!("{error}. For differing field counts, try adding Unknown columns to the schema.")
 }
 
 // Workaround borrowed from boilmaster to check for file existence
